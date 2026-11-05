@@ -1,0 +1,120 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------------
+    // ระบบสิทธิ์: ล็อกอินด้วย Firebase Authentication (อีเมลสังเคราะห์ username.rev@dailylog.example.com
+    // + รหัส 6 หลักเป็นรหัสผ่าน) แล้วตรวจสิทธิ์จากเอกสาร users/{username}
+    //   user     เห็นและแก้เฉพาะงานของตัวเอง (ล็อกอินด้วยรหัส 6 หลักที่ไม่ซ้ำกัน)
+    //   admin    เพิ่ม/ปิดใช้งานผู้ใช้ได้ เห็นงานทุกคน แต่แก้ได้เฉพาะงานของตัวเอง
+    //   overview เห็นงานทุกคน ดูอย่างเดียว
+    // ---------------------------------------------------------------
+
+    function signedIn() { return request.auth != null && request.auth.token.email != null; }
+    function uname() { return request.auth.token.email.split('[.]')[0]; }
+    function mePath() { return /databases/$(database)/documents/users/$(uname()); }
+    function active() {
+      return signedIn() && exists(mePath())
+        && get(mePath()).data.active == true
+        && get(mePath()).data.authEmail == request.auth.token.email;
+    }
+    function role() { return get(mePath()).data.role; }
+    function isAdmin() { return active() && role() == 'admin'; }
+    function canLog() { return active() && (role() == 'user' || role() == 'admin'); }
+    function canViewAll() { return active() && (role() == 'admin' || role() == 'overview'); }
+
+    // ---------------- งาน ----------------
+    match /events/{eventId} {
+      allow read: if canViewAll() || (canLog() && resource.data.get('ownerId', '') == uname());
+      allow create: if canLog() && validEvent(request.resource.data)
+        && request.resource.data.ownerId == uname();
+      allow update: if validEvent(request.resource.data) && (
+        (canLog() && resource.data.get('ownerId', '') == uname() && request.resource.data.ownerId == uname())
+        || (isAdmin() && !('ownerId' in resource.data) && request.resource.data.ownerId == uname()));
+      allow delete: if canLog() && resource.data.get('ownerId', '') == uname();
+    }
+
+    // ---------------- ผู้ใช้ ----------------
+    match /users/{userId} {
+      allow read: if isAdmin() || (active() && userId == uname());
+      allow create: if (isAdmin() || bootstrapUser(userId)) && validUser(request.resource.data, userId)
+        && (isAdmin() || (request.resource.data.role == 'admin' && request.resource.data.authEmail == request.auth.token.email));
+      allow update: if isAdmin() && validUser(request.resource.data, userId)
+        && (userId != uname() || (request.resource.data.role == 'admin' && request.resource.data.active == true));
+      allow delete: if false;
+    }
+
+    // ล็อกอินด้วยรหัส 6 หลักอย่างเดียว: เอกสารชื่อ SHA-256 ของรหัส ชี้ไปที่บัญชีของเจ้าของรหัส
+    // อ่านได้ทีละเอกสาร (ห้าม list ยกเว้นแอดมิน) สร้างแล้วห้ามแก้ จึงรับประกันว่ารหัสไม่ซ้ำกัน
+    match /codes/{h} {
+      allow get: if true;
+      allow list: if isAdmin();
+      allow create: if validCode(request.resource.data, h) && (
+        isAdmin()
+        || (bootstrapUser('admin') && request.resource.data.username == 'admin' && request.resource.data.email == request.auth.token.email)
+        || (active() && request.resource.data.username == uname() && request.resource.data.email == request.auth.token.email));
+      allow update: if false;
+      allow delete: if isAdmin() || (active() && resource.data.email == request.auth.token.email);
+    }
+
+    // ติดตั้งครั้งแรก: ต้องรู้รหัสติดตั้ง และทำได้ครั้งเดียว (สร้างแล้วห้ามแก้/ลบ)
+    match /config/{docId} {
+      allow read: if false;
+      allow create: if docId == 'setup' && signedIn()
+        && request.resource.data.keys().hasOnly(['setupKey', 'adminEmail'])
+        && request.resource.data.setupKey == 'CHANGE_ME_SETUP_KEY'
+        && request.resource.data.adminEmail == request.auth.token.email;
+      allow update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // เฉพาะบัญชี admin คนแรกที่ผ่านขั้นติดตั้งเท่านั้น
+    function bootstrapUser(id) {
+      return id == 'admin' && signedIn()
+        && exists(/databases/$(database)/documents/config/setup)
+        && get(/databases/$(database)/documents/config/setup).data.adminEmail == request.auth.token.email
+        && uname() == 'admin';
+    }
+
+    function validCode(d, id) {
+      return id.matches('[0-9a-f]{64}')
+        && d.keys().hasOnly(['email', 'username'])
+        && d.email is string && d.username is string
+        && d.email.matches('[a-z0-9_-]{2,30}[.][0-9]{1,3}@dailylog[.]example[.]com')
+        && d.email.split('[.]')[0] == d.username;
+    }
+
+    function validUser(d, id) {
+      return d.keys().hasOnly(['username', 'name', 'role', 'active', 'authEmail', 'rev', 'createdAt', 'updatedAt'])
+        && d.keys().hasAll(['username', 'name', 'role', 'active', 'authEmail'])
+        && d.username == id
+        && id.matches('[a-z0-9_-]{2,30}')
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 100
+        && d.role in ['user', 'admin', 'overview']
+        && d.active is bool
+        && d.authEmail is string
+        && d.authEmail.matches('[a-z0-9_-]{2,30}[.][0-9]{1,3}@dailylog[.]example[.]com')
+        && d.authEmail.split('[.]')[0] == id;
+    }
+
+    function validEvent(d) {
+      return d.keys().hasOnly(['title','date','start','end','category','status','project','note','assignee','link','ownerId','ownerName','createdAt','updatedAt'])
+        && d.keys().hasAll(['title','date','start','end','category','status','project','note','ownerId'])
+        && d.title is string && d.title.size() > 0 && d.title.size() <= 200
+        && d.date is string && d.date.size() == 10
+        && d.start is string && d.start.size() == 5
+        && d.end is string && d.end.size() == 5
+        && d.category is string && d.category.size() <= 40
+        && d.status in ['todo','doing','done','blocked']
+        && d.project is string && d.project.size() <= 100
+        && d.note is string && d.note.size() <= 5000
+        && d.ownerId is string && d.ownerId.size() <= 40
+        && (!('ownerName' in d) || (d.ownerName is string && d.ownerName.size() <= 100))
+        && (!('assignee' in d) || (d.assignee is string && d.assignee.size() <= 100))
+        && (!('link' in d) || (d.link is string && d.link.size() <= 500 && (d.link == '' || d.link.matches('https?://.*'))));
+    }
+  }
+}

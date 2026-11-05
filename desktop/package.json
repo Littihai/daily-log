@@ -1,0 +1,28 @@
+{
+  "name": "daily-log-desktop",
+  "version": "1.0.0",
+  "description": "Daily Log - ตารางงานประจำวัน (แอป Windows)",
+  "main": "main.js",
+  "author": "Daily Log",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "45.2.3",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "com.ritz.dailylog",
+    "productName": "Daily Log",
+    "copyright": "Daily Log",
+    "directories": { "output": "dist" },
+    "files": ["main.js", "offline.html", "icon.png", "package.json"],
+    "win": {
+      "target": ["portable"],
+      "icon": "icon.ico",
+      "artifactName": "DailyLog-${version}.exe"
+    }
+  }
+}

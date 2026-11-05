@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daily Log - ตารางงานประจำวัน</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#26272b">
+<script>
+(function () {
+  var t = null;
+  try { t = localStorage.getItem('dl.theme'); } catch (e) {}
+  if (t !== 'dark' && t !== 'light') t = (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', t);
+})();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body class="auth-pending">
+
+<section class="auth" id="authScreen">
+  <div class="auth-card">
+    <span class="auth-pill">DAILY LOG</span>
+
+    <form id="loginForm" novalidate>
+      <h1>เข้าสู่ระบบ</h1>
+      <p class="auth-sub">กรอกรหัส 6 หลักที่แอดมินให้ไว้</p>
+      <div id="otpLogin"></div>
+      <p class="auth-hint">รหัสนี้เป็นของคุณคนเดียว ไม่ต้องบอกใคร ไม่ได้รับรหัสหรือลืมรหัส? ติดต่อแอดมิน</p>
+      <p class="err" id="aErr" hidden></p>
+      <label class="auth-remember"><input type="checkbox" id="aRemember" checked> จดจำการเข้าสู่ระบบในเครื่องนี้</label>
+      <button type="submit" class="auth-btn" id="aSubmit"><span>ยืนยัน</span><i data-ic="arrow"></i></button>
+    </form>
+
+    <form id="setupForm" novalidate hidden>
+      <h1>ติดตั้งครั้งแรก</h1>
+      <p class="auth-sub">ตั้งรหัสของแอดมิน (และ Overview ถ้าต้องการ) ใช้ได้ครั้งเดียวตอนเริ่มระบบ</p>
+      <label class="auth-label" for="sKey">รหัสติดตั้ง</label>
+      <input id="sKey" class="auth-user" autocomplete="off" spellcheck="false" autocapitalize="off">
+      <label class="auth-label" for="sName">ชื่อแอดมิน</label>
+      <input id="sName" class="auth-user" placeholder="ชื่อที่แสดงในระบบ" maxlength="100" autocomplete="off">
+      <span class="auth-label">รหัสแอดมิน 6 หลัก</span>
+      <div id="otpSetupAdmin"></div>
+      <span class="auth-label">ยืนยันรหัสแอดมินอีกครั้ง</span>
+      <div id="otpSetupAdmin2"></div>
+      <span class="auth-label">รหัส Overview 6 หลัก (ต้องไม่ซ้ำกับรหัสแอดมิน) เว้นว่างได้</span>
+      <div id="otpSetupOv"></div>
+      <p class="err" id="sErr" hidden></p>
+      <button type="submit" class="auth-btn" id="sSubmit"><span>ติดตั้งและเข้าสู่ระบบ</span><i data-ic="arrow"></i></button>
+    </form>
+
+    <div class="auth-wait" id="authWait" hidden>กำลังตรวจสอบสิทธิ์...</div>
+  </div>
+</section>
+
+<div class="app" id="app">
+
+  <aside class="sidebar">
+    <div class="brand">
+      <svg viewBox="0 0 34 34" width="34" height="34" aria-hidden="true"><circle cx="17" cy="17" r="17" fill="#111"/><path d="M17 5a12 12 0 0 1 0 24z" fill="#fff"/><circle cx="17" cy="17" r="6" fill="#111"/></svg>
+      <span>Daily Log.</span>
+    </div>
+
+    <label class="search">
+      <i data-ic="search"></i>
+      <input id="q" type="search" placeholder="ค้นหางาน" autocomplete="off" aria-label="ค้นหางาน">
+      <kbd>/</kbd>
+    </label>
+
+    <nav class="nav">
+      <button type="button" data-page="calendar" class="active"><i data-ic="calendar"></i>ปฏิทินงาน</button>
+      <button type="button" data-page="report"><i data-ic="report"></i>รายงานสรุป</button>
+      <button type="button" data-page="pending"><i data-ic="clock"></i>งานค้าง<span class="cnt" id="pendingCount" hidden></span></button>
+      <button type="button" data-page="settings"><i data-ic="settings"></i>ตั้งค่า</button>
+    </nav>
+
+    <section class="card upcoming" id="upcoming"></section>
+    <section class="card today" id="todayCard"></section>
+
+    <div class="me" id="meCard">
+      <div class="avatar" id="meAvatar"></div>
+      <div class="me-text"><b id="meName"></b><span class="rolepill" id="meRole"></span></div>
+      <button type="button" class="btn btn-icon ghost" id="btnLogout" title="ออกจากระบบ" aria-label="ออกจากระบบ"><i data-ic="logout"></i></button>
+    </div>
+    <div class="tools">
+      <button type="button" class="btn" id="btnBackup" title="ดาวน์โหลดข้อมูลทั้งหมดเป็นไฟล์สำรอง"><i data-ic="download"></i>สำรอง</button>
+      <button type="button" class="btn" id="btnImport" title="นำเข้าข้อมูลจากไฟล์สำรอง"><i data-ic="upload"></i>นำเข้า</button>
+      <button type="button" class="btn" id="btnTheme" title="สลับโหมดมืด / สว่าง"></button>
+    </div>
+    <div class="conn" id="conn"></div>
+  </aside>
+
+  <main class="main">
+    <section id="calendarPage" class="page">
+      <div class="banner" id="legacyBanner" hidden></div>
+      <header class="toolbar">
+        <button type="button" class="btn" id="btnToday">วันนี้</button>
+        <button type="button" class="btn btn-icon" id="btnPrev" aria-label="ก่อนหน้า"><i data-ic="left"></i></button>
+        <button type="button" class="btn btn-icon" id="btnNext" aria-label="ถัดไป"><i data-ic="right"></i></button>
+        <h1 class="range-label" id="rangeLabel"></h1>
+        <span class="grow"></span>
+        <div class="seg" id="segView" role="group" aria-label="มุมมอง">
+          <button type="button" data-view="d" title="รายวัน">D</button>
+          <button type="button" data-view="5d" title="5 วันทำงาน (จ-ศ)">5D</button>
+          <button type="button" data-view="w" title="รายสัปดาห์ (จ-อา)">W</button>
+          <button type="button" data-view="m" title="รายเดือน">M</button>
+        </div>
+        <button type="button" class="btn" id="btnMs" hidden title="เทียบ/นำเข้าประชุมจาก Outlook และ Teams"><i data-ic="calendar"></i><span class="btn-label">Outlook</span></button>
+        <button type="button" class="btn" id="btnFilter" title="ตัวกรอง"><i data-ic="filter"></i><span class="btn-label">ตัวกรอง</span><b class="fbadge" data-fbadge hidden></b></button>
+        <button type="button" class="btn btn-icon" id="btnGoto" aria-label="ไปที่วันที่" title="ไปที่วันที่"><i data-ic="calendar"></i></button>
+        <button type="button" class="btn btn-icon" id="btnFull" aria-label="เต็มจอ" title="เต็มจอ"><i data-ic="expand"></i></button>
+        <button type="button" class="btn btn-dark" id="btnAdd">เพิ่มงาน <i data-ic="plus"></i></button>
+      </header>
+      <div class="cal-scroll" id="calview"></div>
+    </section>
+
+    <section id="reportPage" class="page" hidden></section>
+    <section id="pendingPage" class="page" hidden></section>
+    <section id="settingsPage" class="page" hidden>
+      <div class="rp-bar"><h1>ตั้งค่า</h1></div>
+      <div class="rp-scroll">
+        <div class="panel set-card">
+          <h3>บัญชีของฉัน</h3>
+          <div class="my-profile" id="myProfile"></div>
+          <form id="codeForm" novalidate>
+            <h4>เปลี่ยนรหัส 6 หลัก</h4>
+            <span class="auth-label">รหัสปัจจุบัน</span><div id="otpCur"></div>
+            <span class="auth-label">รหัสใหม่</span><div id="otpNew"></div>
+            <span class="auth-label">ยืนยันรหัสใหม่</span><div id="otpNew2"></div>
+            <p class="err" id="cErr" hidden></p>
+            <button type="submit" class="btn btn-dark" id="cSubmit">เปลี่ยนรหัส</button>
+          </form>
+        </div>
+        <div class="panel set-card" id="msCard">
+          <h3>เชื่อมต่อ Outlook / Teams</h3>
+          <div id="msBody"></div>
+        </div>
+        <div class="panel set-card" id="usersCard" hidden>
+          <div class="set-head"><h3>ผู้ใช้งาน</h3><span class="grow"></span><button type="button" class="btn btn-dark sm" id="btnAddUser"><i data-ic="plus"></i>เพิ่มผู้ใช้</button></div>
+          <p class="muted" style="margin:0 0 10px">User ดูและแก้เฉพาะงานของตัวเอง, Admin จัดการผู้ใช้และเห็นงานทุกคน, Overview เห็นงานทุกคนแบบดูอย่างเดียว</p>
+          <div id="usersTable"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<dialog id="dlg">
+  <form id="evForm" novalidate>
+    <header class="dlg-head">
+      <h2 id="dlgTitle">เพิ่มงาน</h2>
+      <button type="button" class="btn btn-icon ghost" data-close aria-label="ปิด"><i data-ic="x"></i></button>
+    </header>
+    <div class="dlg-body">
+      <div class="tpl-row" id="tplBox"><span class="lbl">เทมเพลต (กดเพื่อเติมข้อมูลอัตโนมัติ)</span><div class="tpls" id="tplList"></div></div>
+      <input id="fTitle" class="f-title" placeholder="ทำอะไร เช่น แก้บั๊กหน้ารับสินค้า" maxlength="200" autocomplete="off">
+      <div class="row3">
+        <label class="field">วันที่<input type="date" id="fDate"></label>
+        <label class="field">เริ่ม<input type="time" id="fStart" step="900"></label>
+        <label class="field">เสร็จ<input type="time" id="fEnd" step="900"></label>
+      </div>
+      <div class="field"><span class="lbl">หมวดงาน</span><div class="chips" id="fCats"></div></div>
+      <div class="field"><span class="lbl">สถานะ</span><div class="chips" id="fStatus"></div></div>
+      <label class="field">โปรเจกต์ / ระบบ
+        <input id="fProject" list="projList" maxlength="100" placeholder="เช่น THAIMEIRA, TMCL-PR" autocomplete="off">
+        <datalist id="projList"></datalist>
+      </label>
+      <div class="row2">
+        <label class="field">ผู้ทำ
+          <input id="fAssignee" list="asgList" maxlength="100" placeholder="ชื่อผู้รับผิดชอบ" autocomplete="off">
+          <datalist id="asgList"></datalist>
+        </label>
+        <label class="field">ลิงก์ (ตั๋วงาน / เอกสาร)
+          <input id="fLink" type="url" maxlength="500" placeholder="https://..." autocomplete="off">
+        </label>
+      </div>
+      <label class="field">รายละเอียด / ปัญหา / สิ่งที่ต้องทำต่อ
+        <textarea id="fNote" rows="4" maxlength="5000"></textarea>
+      </label>
+      <div class="field" id="repeatBox">
+        <span class="lbl">ทำซ้ำ (สร้างเป็นรายการแยกของแต่ละวัน)</span>
+        <div class="row2">
+          <select id="fRepeat">
+            <option value="none">ไม่ทำซ้ำ</option>
+            <option value="daily">ทุกวัน</option>
+            <option value="weekdays">จันทร์ - ศุกร์</option>
+            <option value="weekly">ทุกสัปดาห์ (วันเดิม)</option>
+          </select>
+          <label class="inline">ถึงวันที่ <input type="date" id="fUntil"></label>
+        </div>
+      </div>
+      <p class="err" id="fErr" hidden></p>
+    </div>
+    <footer class="dlg-foot">
+      <button type="button" class="btn danger" id="btnDelete"><i data-ic="trash"></i>ลบ</button>
+      <button type="button" class="btn" id="btnSaveTpl" title="เก็บหัวข้อ หมวด โปรเจกต์ และระยะเวลานี้ไว้ใช้ซ้ำ">เก็บเป็นเทมเพลต</button>
+      <span class="grow"></span>
+      <button type="button" class="btn" data-close>ยกเลิก</button>
+      <button type="submit" class="btn btn-dark" id="btnSubmit">บันทึก</button>
+    </footer>
+  </form>
+</dialog>
+
+<dialog id="dlgMs">
+  <div class="fform">
+    <header class="dlg-head"><h2>ประชุม Outlook / Teams ในช่วงที่เห็น</h2><button type="button" class="btn btn-icon ghost" id="msClose" aria-label="ปิด"><i data-ic="x"></i></button></header>
+    <div class="dlg-body" id="msDlgBody"></div>
+    <footer class="dlg-foot"><span class="grow"></span><button type="button" class="btn" id="msCancel">ปิด</button><button type="button" class="btn btn-dark" id="msImport">นำเข้าที่เลือก</button></footer>
+  </div>
+</dialog>
+
+<dialog id="dlgUser">
+  <div class="fform">
+    <header class="dlg-head"><h2 id="uTitle">เพิ่มผู้ใช้</h2><button type="button" class="btn btn-icon ghost" id="uClose" aria-label="ปิด"><i data-ic="x"></i></button></header>
+    <form id="uForm" novalidate>
+      <div class="dlg-body">
+        <label class="field" id="uNameWrap">ชื่อที่แสดง<input id="uName" maxlength="100" placeholder="เช่น สมชาย ใจดี" autocomplete="off"></label>
+        <label class="field" id="uRoleWrap">สิทธิ์
+          <select id="uRole">
+            <option value="user">User - ลงงานและดูงานของตัวเอง</option>
+            <option value="admin">Admin - จัดการผู้ใช้ เห็นงานทุกคน และลงงานได้</option>
+            <option value="overview">Overview - ผู้บริหาร เห็นงานทุกคน ดูอย่างเดียว</option>
+          </select>
+        </label>
+        <div class="field"><span class="lbl">รหัสเข้าระบบ 6 หลัก (ต้องไม่ซ้ำกับคนอื่น)</span>
+          <div class="row2"><input id="uCode" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="off"><button type="button" class="btn" id="uRandom">สุ่มรหัส</button></div>
+        </div>
+        <p class="err" id="uErr" hidden></p>
+      </div>
+      <footer class="dlg-foot"><span class="grow"></span><button type="button" class="btn" id="uCancel">ยกเลิก</button><button type="submit" class="btn btn-dark" id="uSubmit">สร้างผู้ใช้</button></footer>
+    </form>
+    <div id="uDone" hidden>
+      <div class="dlg-body">
+        <p style="margin:0">บันทึกแล้ว แจ้งข้อมูลนี้ให้ผู้ใช้ (รหัสจะไม่แสดงอีก)</p>
+        <div class="cred"><span>ผู้ใช้</span><b id="uDoneUser"></b><span>รหัส</span><b id="uDoneCode"></b></div>
+        <p class="muted" style="margin:0">ผู้ใช้เปลี่ยนรหัสเองได้ที่เมนูตั้งค่า</p>
+      </div>
+      <footer class="dlg-foot"><button type="button" class="btn" id="uCopy">คัดลอก</button><span class="grow"></span><button type="button" class="btn btn-dark" id="uOk">เสร็จสิ้น</button></footer>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="dlgFilter">
+  <div class="fform">
+    <header class="dlg-head"><h2>ตัวกรอง</h2><button type="button" class="btn btn-icon ghost" id="flClose" aria-label="ปิด"><i data-ic="x"></i></button></header>
+    <div class="dlg-body">
+      <label class="field">หมวดงาน<select id="flCat"></select></label>
+      <label class="field">สถานะ<select id="flStatus"></select></label>
+      <label class="field">โปรเจกต์ / ระบบ<select id="flProject"></select></label>
+      <label class="field">ผู้ทำ<select id="flAssignee"></select></label>
+      <label class="field" id="flOwnerWrap">ผู้บันทึก (ใครเป็นคนลงงาน)<select id="flOwner"></select></label>
+    </div>
+    <footer class="dlg-foot"><button type="button" class="btn" id="flClear">ล้างตัวกรอง</button><span class="grow"></span><button type="button" class="btn btn-dark" id="flDone">เสร็จสิ้น</button></footer>
+  </div>
+</dialog>
+
+<input type="file" id="importFile" class="vh" accept="application/json,.json" tabindex="-1" aria-hidden="true">
+<div id="ctx" class="ctx" hidden></div>
+<div id="toast" class="toast" hidden></div>
+<input type="date" id="gotoDate" class="vh" tabindex="-1" aria-hidden="true">
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

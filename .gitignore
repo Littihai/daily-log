@@ -1,0 +1,16 @@
+# เครื่องมือและโฟลเดอร์ที่สร้างอัตโนมัติ
+node_modules/
+dist/
+.firebase/
+.claude/
+
+# ข้อมูลงานจริงของผู้ใช้ ห้ามขึ้น repo
+Daily_Work_Log*.xlsx
+~$*
+
+# log และไฟล์ชั่วคราว
+*.log
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+.DS_Store
